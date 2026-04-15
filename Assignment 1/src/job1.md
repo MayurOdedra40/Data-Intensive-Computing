@@ -20,7 +20,7 @@ Runs once per worker node before any records are processed.
 ### `mapper(_, line)`
 The primary processing unit for every JSON review record in the dataset.
 1. **Parsing**: Safely converts the raw JSON string into a Python dictionary.
-2. **Feature Extraction**: Extracts the `reviewText` for tokenization and the `category` for classification.
+2. **Feature Extraction**: Extracts the `reviewText` for tokenization and the `category` for classification
 3. **Preprocessing**: Applies the mandatory delimiters, converts text to lowercase, and filters out stopwords.
 4. **Filtering**: Removes any tokens consisting of only one character.
 5. **Deduplication**: Converts the list of tokens into a `set` to ensure counts represent document presence rather than frequency.
