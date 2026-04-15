@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+/globals.tsv
+/job1_output.txt
+/job2_output.txt
