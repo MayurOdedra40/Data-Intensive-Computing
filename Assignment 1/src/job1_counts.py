@@ -6,8 +6,12 @@ import json
 from utils.text_processing import load_stopwords, parse_review_line, preprocess_review_text
 
 class MRJob1Counts(MRJob):
-    # Use RawValueProtocol to read the JSON lines as raw strings 
+    # Use RawValueProtocol to read the JSON lines as raw strings
     INPUT_PROTOCOL = RawValueProtocol
+
+    JOBCONF = {
+        'mapreduce.job.reduces': 24,
+    }
 
     def configure_args(self):
         super(MRJob1Counts, self).configure_args()

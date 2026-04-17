@@ -1,0 +1,66 @@
+digraph Pipeline {
+    rankdir=TB;
+    node [fontname="Helvetica", fontsize=10];
+    edge [fontname="Helvetica", fontsize=9];
+
+    // Data files
+    node [shape=cylinder, style=filled, fillcolor="#E8F0FE"];
+    input       [label="reviews_devset.json\n(JSON lines)"];
+    job1_out    [label="job1_output.txt"];
+    globals     [label="globals.tsv\n(N, C:<cat>)"];
+    job2_out    [label="job2_output.txt"];
+    job4_out    [label="job4_output.txt"];
+    final_out   [label="output.txt"];
+
+    // MapReduce jobs
+    node [shape=box, style="rounded,filled", fillcolor="#FFF3C4"];
+    job1 [label=<<b>Job 1 — Feature Counting</b><br align="left"/>
+        <font point-size="9">
+        mapper in:   (None, raw JSON line)<br align="left"/>
+        mapper out:  (str, 1)  keys: "N", "C:&lt;cat&gt;",<br align="left"/>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; "T:&lt;term&gt;", "TC:&lt;term&gt;:&lt;cat&gt;"<br align="left"/>
+        combiner:    (str, int) → (str, int) (local sum)<br align="left"/>
+        reducer out: (str, int) (global count)<br align="left"/>
+        </font>>];
+
+    job2 [label=<<b>Job 2 — Chi-Square</b><br align="left"/>
+        <font point-size="9">
+        broadcast:   globals.tsv (N, n_c table)<br align="left"/>
+        mapper in:   ("T:…" | "TC:…:…", count)<br align="left"/>
+        mapper out:  (term, ("T", n_t))<br align="left"/>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(term, ("TC", category, n_tc))<br align="left"/>
+        reducer out: (category, (term, chi2))<br align="left"/>
+        </font>>];
+
+    job4 [label=<<b>Job 4 — Top-K per Category</b><br align="left"/>
+        <font point-size="9">
+        mapper in:   (None, "&lt;jcat&gt;\t&lt;jval&gt;")<br align="left"/>
+        mapper out:  (category, (term, chi2))<br align="left"/>
+        reducer out: (category, (term, chi2))<br align="left"/>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; top 75, sorted by −chi2, term<br align="left"/>
+        </font>>];
+
+    // Local (non-MR) step
+    node [shape=box, style="rounded,filled", fillcolor="#D5F5E3"];
+    finalize [label=<<b>finalize_output.py (local)</b><br align="left"/>
+        <font point-size="9">
+        reads:  (category, (term, chi2)) via stdin<br align="left"/>
+        writes: &lt;category&gt; term:chi2 … term:chi2<br align="left"/>
+        then:   merged alphabetical dictionary<br align="left"/>
+        </font>>];
+
+    // Flow
+    input    -> job1;
+    job1     -> job1_out;
+    job1_out -> globals  [label="grep  '^\"N\"|^\"C:'", style=dashed];
+    job1_out -> job2     [label="T:, TC: rows"];
+    globals  -> job2     [label="--globals\n(broadcast)"];
+    job2     -> job2_out;
+    job2_out -> job4;
+    job4     -> job4_out;
+    job4_out -> finalize [label="stdin"];
+    finalize -> final_out;
+
+    // Layout hint
+    {rank=same; job1_out; globals;}
+}

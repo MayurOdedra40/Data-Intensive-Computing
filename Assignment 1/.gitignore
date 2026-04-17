@@ -5,3 +5,4 @@ __pycache__/
 /globals.tsv
 /job1_output.txt
 /job2_output.txt
+.venv/

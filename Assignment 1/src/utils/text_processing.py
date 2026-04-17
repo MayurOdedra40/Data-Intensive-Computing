@@ -15,8 +15,7 @@ from pathlib import Path
 import re
 from typing import AbstractSet, Iterator, Mapping
 
-# The PDF lists these exact characters as delimiters. Hyphen is intentionally
-# excluded because it is not part of the required delimiter list.
+# The PDF lists these exact characters as delimiters.
 DELIMITER_CHARS = "()[]{}.!?,;:+=-_\"'`~#@&*%€$§\\/"
 TOKEN_SPLIT_RE = re.compile(
     r"[\s\d" + re.escape(DELIMITER_CHARS) + r"]+",
