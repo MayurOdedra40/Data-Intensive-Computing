@@ -3,15 +3,29 @@ from mrjob.protocol import JSONProtocol
 
 
 class MRJob2ChiSquare(MRJob):
+    """Map-side broadcast join that turns Job 1 counts into chi-square scores.
+
+    ``globals.tsv`` (N and the 22 n_c values) is broadcast to every worker so
+    the join happens in the reducer without a second shuffle for corpus-level
+    counts. The mapper re-keys by term so each reducer call sees one ``T`` row
+    plus one ``TC`` row per category the term appears in.
+    """
+
     INPUT_PROTOCOL = JSONProtocol
 
     def configure_args(self):
+        """Register ``--globals`` so mrjob ships the broadcast file with the job."""
         super(MRJob2ChiSquare, self).configure_args()
         self.add_file_arg('--globals',
                           help='Path to globals.tsv containing N and C:* rows '
                                'extracted from Job 1 output')
 
     def _load_globals(self):
+        """Parse ``globals.tsv`` into ``self.N`` and ``self.cat_docs`` lookup tables.
+
+        Called from both mapper_init and reducer_init so the broadcast values
+        are available in either phase regardless of how mrjob schedules tasks.
+        """
         self.N = 0
         self.cat_docs = {}  # category name -> n_c
 
@@ -35,12 +49,19 @@ class MRJob2ChiSquare(MRJob):
                     self.cat_docs[key[2:]] = val
 
     def mapper_init(self):
+        """Populate broadcast globals on each mapper task."""
         self._load_globals()
 
     def reducer_init(self):
+        """Populate broadcast globals on each reducer task."""
         self._load_globals()
 
     def mapper(self, key, value):
+        """Re-key Job 1 output by term so ``T`` and ``TC`` rows meet in one reducer.
+
+        ``N`` and ``C:*`` rows are discarded because the same values are already
+        loaded in memory from the broadcast file.
+        """
         if not isinstance(key, str):
             return
 
@@ -56,6 +77,11 @@ class MRJob2ChiSquare(MRJob):
         # "N" and "C:..." rows are intentionally dropped - already in globals.
 
     def reducer(self, term, values):
+        """Compute chi-square for one term against every category it appears in.
+
+        Output is keyed by category — exactly the grouping Job 3 needs — so no
+        reshuffle happens between Job 2 and Job 3.
+        """
         n_t = 0
         tc_rows = []  # list of (category, n_tc)
 

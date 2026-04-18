@@ -6,6 +6,12 @@ import json
 from utils.text_processing import load_stopwords, parse_review_line, preprocess_review_text
 
 class MRJob1Counts(MRJob):
+    """Single-pass count collector for chi-square.
+
+    Emits all four count families (N, n_c, n_t, n_tc) keyed by prefix so one
+    scan of the raw review file populates every counter Job 2 will need.
+    """
+
     # Use RawValueProtocol to read the JSON lines as raw strings
     INPUT_PROTOCOL = RawValueProtocol
 
@@ -14,15 +20,22 @@ class MRJob1Counts(MRJob):
     }
 
     def configure_args(self):
+        """Register ``--stopwords`` so mrjob ships the file to every worker."""
         super(MRJob1Counts, self).configure_args()
         self.add_file_arg('--stopwords', help='Path to stopwords.txt')
 
     def mapper_init(self):
-        # Load stopwords 
+        """Load the stopword set once per task; ``@lru_cache`` makes repeat hits free."""
+        # Load stopwords
         stop_path = self.options.stopwords
         self.stopwords = load_stopwords(stop_path) if stop_path else set()
 
     def mapper(self, _, line):
+        """Emit one count per count family for a single review.
+
+        Tokens are deduplicated per document because chi-square is defined on
+        document counts, not term frequencies.
+        """
         # Parse json
         record = parse_review_line(line)
         if not record:
@@ -31,30 +44,32 @@ class MRJob1Counts(MRJob):
         # Get category and review text
         category = record.get('category', 'Unknown').strip()
         text = record.get('reviewText', '')
-        
+
         # Preprocess text
         raw_tokens = preprocess_review_text(text, self.stopwords)
-        
+
         # Get unique tokens
         unique_tokens = {t for t in raw_tokens if len(t) > 1}
 
         # Total Docs
         yield "N", 1
-        
-        # Category docs 
+
+        # Category docs
         yield f"C:{category}", 1
-        
+
         for token in unique_tokens:
-            # Term docs 
+            # Term docs
             yield f"T:{token}", 1
-            # Term-Category docs 
+            # Term-Category docs
             yield f"TC:{token}:{category}", 1
 
     def combiner(self, key, counts):
+        """Collapse identical keys on the mapper side to shrink shuffle volume."""
         # Sum counts locally on the worker node
         yield key, sum(counts)
 
     def reducer(self, key, counts):
+        """Final sum across all partitions for one count key."""
         # Sum all local counts
         yield key, sum(counts)
 
