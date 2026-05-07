@@ -5,3 +5,5 @@ outputs/
 common.zip
 CLAUDE.md
 .claude/
+.venv/
+reviews_devset.json
