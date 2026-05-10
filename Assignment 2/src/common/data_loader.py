@@ -47,5 +47,8 @@ def load_reviews_rdd(sc, path: str):
         .filter(lambda r: r is not None)
     )
 
-
-__all__ = ["load_reviews_rdd", "resolve_path"]
+def load_reviews_df(spark, path: str):
+    """Read JSON-lines reviews into a Spark DataFrame."""
+    return spark.read.json(path)
+    
+__all__ = ["load_reviews_rdd", "resolve_path", "load_reviews_df"]
