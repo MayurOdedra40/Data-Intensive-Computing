@@ -1,8 +1,14 @@
 # Assignment 2: Text Processing and Classification using Apache Spark
 
-**Data-Intensive Computing — TU Wien, 2026**
+```
+Contributors:
 
-**Contributing Group Members:** Member A · Member B · Member C · Member D
+Hassan Ali
+Odedra Mayurbhai Jakharabhai
+Petho Dominik
+Robea Anda-Teodora
+Rusu Paisie
+```
 
 ---
 
@@ -237,7 +243,3 @@ This assignment implemented a complete distributed text-processing and classific
 **Part 2** showed that Spark ML's `Pipeline` API cleanly encapsulates TF-IDF feature extraction. The global ChiSqSelector (2,000 terms) overlaps with 53.8% of Assignment 1's per-category top-75 union. The divergence is expected: global TF-IDF chi-square selection favours broadly discriminative mid-frequency terms, while per-category selection of Assignment 1 emphasises highly domain-specific vocabulary.
 
 **Part 3** demonstrated that a `OneVsRest(LinearSVC)` classifier achieves a test-set weighted F1 of **0.6077** on the 22-category problem with the optimal configuration (2,000 features, regParam=0.01, standardization=True, maxIter=10). Feature dimensionality was the dominant factor in performance, followed by the combination of standardisation and regularisation strength. Standardisation is effectively mandatory for stable SVM convergence on TF-IDF features with higher regularisation values.
-
----
-
-*Submitted via TUWEL · May 2026 · DIC Assignment 2*

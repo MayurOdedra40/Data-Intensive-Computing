@@ -1,6 +1,10 @@
 echo "=============================="
 echo " Running Part 3 — SVM and Grid Search"
 echo "=============================="
+
+USER=$(whoami)
+HDFS_HOME="hdfs:///user/${USER}"
+
 hdfs dfs -rm -r -f "${HDFS_HOME}/grid_search_results.csv"
 
 # Build pipeline.zip if not present

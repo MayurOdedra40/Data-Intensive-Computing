@@ -1,6 +1,10 @@
 echo "=============================="
 echo " Running Part 1 — RDD Chi2"
 echo "=============================="
+
+USER=$(whoami)
+HDFS_HOME="hdfs:///user/${USER}"
+
 hdfs dfs -rm -r -f "${HDFS_HOME}/output_rdd.txt"
 
 spark-submit --master yarn --deploy-mode cluster \

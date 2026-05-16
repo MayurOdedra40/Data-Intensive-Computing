@@ -1,6 +1,10 @@
 echo "=============================="
 echo " Running Part 2 — DF Pipeline"
 echo "=============================="
+
+USER=$(whoami)
+HDFS_HOME="hdfs:///user/${USER}"
+
 hdfs dfs -rm -r -f "${HDFS_HOME}/output_ds.txt"
 
 spark-submit --master yarn --deploy-mode cluster \
