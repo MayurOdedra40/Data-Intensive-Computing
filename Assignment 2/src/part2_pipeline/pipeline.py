@@ -206,8 +206,13 @@ def run(
             )
 
         out_path = Path(output_path)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(" ".join(terms) + "\n", encoding="utf-8")
+        out_line = " ".join(terms) + "\n"
+        if output_path.startswith("hdfs://") or mode == "cluster":
+            spark.sparkContext.parallelize([out_line], 1).saveAsTextFile(output_path)
+        else:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(out_line, encoding="utf-8")
+        print(f"wrote {output_path} ({len(terms)} terms)")
         print(f"wrote {out_path} ({len(terms)} terms)")
     finally:
         spark.stop()

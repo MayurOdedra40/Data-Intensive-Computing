@@ -300,8 +300,12 @@ def run(
                 )
 
         out_text = format_output(result)
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        Path(output_path).write_text(out_text, encoding="utf-8")
+        if output_path.startswith("hdfs://") or mode == "cluster":
+        # Write via Spark to HDFS
+            sc.parallelize([out_text], 1).saveAsTextFile(output_path)
+        else:
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            Path(output_path).write_text(out_text, encoding="utf-8")
 
         cat_records.unpersist()
     finally:
