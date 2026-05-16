@@ -1,8 +1,10 @@
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
-outputs/
-common.zip
+.DS_Store
+outputs/*.txt
+outputs/*.csv
+*.zip
 CLAUDE.md
 .claude/
 .venv/
