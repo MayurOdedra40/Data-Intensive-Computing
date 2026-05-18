@@ -8,8 +8,8 @@ Spark implementation of the Amazon Reviews chi² + TF-IDF + SVM pipeline. Three 
 src/
 ├── common/          # shared utilities (tokenizer regex, stopwords, JSON loader, Spark builder)
 ├── part1_rdd/       # Part 1 — chi² via RDDs → output_rdd.txt
-├── part2_pipeline/  # Part 2 — Spark ML pipeline → output_ds.txt          (TBD)
-└── part3_classifier/# Part 3 — OneVsRest LinearSVC + grid search          (TBD)
+├── part2_pipeline/  # Part 2 — Spark ML pipeline → output_ds.txt
+└── part3_classifier/# Part 3 — OneVsRest LinearSVC + grid search
 ```
 
 Outputs (`output_rdd.txt`, `output_ds.txt`, `grid_search_results.csv`) are written to `../outputs/` at the Assignment 2 root, not inside `src/`. The frozen Assignment 1 reference (`output.txt`) lives at `../Assignment_1/output.txt` and is the single source of truth for any "compare to Assignment 1" report sections.
@@ -22,7 +22,7 @@ Part 1 has a one-command runner that handles the Java 11 + WSL2 loopback prereqs
 src/part1_rdd/run_local.sh
 ```
 
-It writes `outputs/output_rdd.txt` from the local Assignment 1 dev-set checkout (`../Assignment 1/src/Assignment_1_Assets/reviews_devset.json`). Java 11 is required — PySpark 3.5 does not run on Java 17+.
+It writes `outputs/output_rdd.txt`. The script auto-detects the dev set (checks `Assignment_1/reviews_devset.json` first, then `../Assignment 1/src/Assignment_1_Assets/reviews_devset.json`) and auto-detects Java (Homebrew OpenJDK 17 on macOS, system JDK on Linux). Java 17 is recommended; Java 25+ is not supported by PySpark 3.5.
 
 ## Cluster submission (YARN)
 
@@ -49,11 +49,14 @@ In `--mode cluster` the `--stopwords` argument is the **bare filename** (`stopwo
 
 | Mode    | Path                                                                    |
 |---------|-------------------------------------------------------------------------|
-| local   | `../Assignment 1/src/Assignment_1_Assets/reviews_devset.json`           |
+| local   | `Assignment_1/reviews_devset.json` (committed, ~23 reviews — smoke-test only) |
+| local (full dev) | `../Assignment 1/src/Assignment_1_Assets/reviews_devset.json` |
 | cluster | `hdfs:///dic_shared/amazon-reviews/full/reviews_devset.json`            |
 | full    | `hdfs:///dic_shared/amazon-reviews/full/reviewscombined.json` (optional)|
 
-Per the spec, all submission artefacts must be produced from the **dev set**, including the comparisons against Assignment 1. The full set is only for ambitious experimentation and is not required for scoring.
+> **Note:** `Assignment_1/reviews_devset.json` is a tiny committed copy for quick local smoke-tests only. All real results (including the submitted output files) must be produced from the full dev set — use the HDFS path on the cluster or the Assignment 1 assets path locally.
+
+Per the spec, all submission artefacts must be produced from the **dev set**, including comparisons against Assignment 1. The full combined set is optional.
 
 ## JupyterHub etiquette (LBD cluster)
 
