@@ -1,0 +1,11 @@
+{
+  "reviewId": "CC_PROFANE_1",
+  "reviewerID": "CC_PROFANE",
+  "asin": "CC0001",
+  "summary": "total garbage",
+  "reviewText": "This product is shit and the seller is a damn liar.",
+  "overall": 1.0,
+  "unixReviewTime": 1000000001,
+  "source": "cornercase",
+  "forceProfane": true
+}

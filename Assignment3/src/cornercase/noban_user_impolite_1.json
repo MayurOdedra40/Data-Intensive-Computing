@@ -1,0 +1,11 @@
+{
+  "reviewId": "CC_NOBAN_USER_1",
+  "reviewerID": "CC_NOBAN_USER",
+  "asin": "CCNOBAN01",
+  "summary": "bad",
+  "reviewText": "this shit did not work for me.",
+  "overall": 1.0,
+  "unixReviewTime": 1000002001,
+  "source": "cornercase",
+  "forceProfane": true
+}

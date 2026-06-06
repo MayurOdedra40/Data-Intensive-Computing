@@ -1,0 +1,11 @@
+{
+  "reviewId": "CC_BAN_USER_1",
+  "reviewerID": "CC_BAN_USER",
+  "asin": "CCBAN01",
+  "summary": "awful",
+  "reviewText": "what a piece of shit product, total crap.",
+  "overall": 1.0,
+  "unixReviewTime": 1000001001,
+  "source": "cornercase",
+  "forceProfane": true
+}
