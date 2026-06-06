@@ -1,0 +1,23 @@
+# Claude files
+.claude/
+**/.claude/
+
+# Python virtual environments
+.env/
+.venv/
+venv/
+env/
+**/.env/
+**/.venv/
+**/venv/
+**/env/
+
+# Environment variable files
+.env
+*.env
+**/.env
+
+# Python caches
+__pycache__/
+**/__pycache__/
+*.py[cod]
