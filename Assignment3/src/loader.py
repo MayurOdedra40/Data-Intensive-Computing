@@ -108,9 +108,9 @@ def main() -> int:
     parser.add_argument("dataset",    help="Path to reviews JSON-lines file")
     parser.add_argument("limit",      nargs="?", type=int, default=78829,
                         help="Max reviews to load (default: 78829 = full devset)")
-    parser.add_argument("--batch-size",  type=int,   default=0,
-                        help="Upload this many reviews, then pause. "
-                             "0 = no batching (default). Recommended: 200")
+    parser.add_argument("--batch-size",  type=int,   default=200,
+                        help="Upload this many reviews, then pause (default: 200). "
+                             "Set to 0 to disable batching.")
     parser.add_argument("--batch-delay", type=float, default=30.0,
                         help="Seconds to sleep between batches (default: 30)")
     args = parser.parse_args()
