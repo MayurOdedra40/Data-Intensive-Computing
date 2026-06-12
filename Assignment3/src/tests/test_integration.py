@@ -139,3 +139,34 @@ def test_ban_after_more_than_three_impolite_reviews():
     item = ddb.get_item(TableName=customers_table,
                         Key={"reviewerID": {"S": reviewer}})["Item"]
     assert int(item["impoliteCount"]["N"]) == 4
+
+
+# ----------------------------------------------------------------------------------------
+# Test 3 -- SENTIMENT: a clearly positive review lands in Reviews with sentiment='positive';
+# a clearly negative one lands with sentiment='negative'.
+# Proves: VADER scoring, overall blending, and threshold mapping all work end to end.
+# ----------------------------------------------------------------------------------------
+def test_sentiment_classification():
+    reviews_table = param("/dic-a3/tables/reviews")
+
+    pos_rid = make_review_id("SENT", "APOS", 200, "excellent wonderful love perfect", "outstanding")
+    drop_review({
+        "reviewId": pos_rid, "reviewerID": "SENT", "asin": "APOS",
+        "summary": "outstanding", "reviewText": "excellent wonderful love perfect",
+        "overall": 5.0, "unixReviewTime": 200, "source": "cornercase",
+    })
+
+    neg_rid = make_review_id("SENT", "ANEG", 201, "terrible awful waste horrible", "worst ever")
+    drop_review({
+        "reviewId": neg_rid, "reviewerID": "SENT", "asin": "ANEG",
+        "summary": "worst ever", "reviewText": "terrible awful waste horrible",
+        "overall": 1.0, "unixReviewTime": 201, "source": "cornercase",
+    })
+
+    pos_item = poll_item(reviews_table, {"reviewId": {"S": pos_rid}},
+                         want_attr="sentiment", want_value="positive")
+    assert pos_item["sentiment"]["S"] == "positive"
+
+    neg_item = poll_item(reviews_table, {"reviewId": {"S": neg_rid}},
+                         want_attr="sentiment", want_value="negative")
+    assert neg_item["sentiment"]["S"] == "negative"

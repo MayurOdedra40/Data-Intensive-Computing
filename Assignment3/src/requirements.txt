@@ -1,7 +1,11 @@
 # Dev / test tooling for running the pipeline locally against MiniStack.
-# (The Stage-1 Lambda stubs themselves need NO third-party packages -- only the Python
-#  standard library + boto3, which the MiniStack Lambda runtime already provides.)
-boto3        # AWS SDK for Python -- used by the loader, the tests, and inside the Lambdas
-awscli       # the `aws` command used by run.sh
-ministack    # the AWS emulator itself
-pytest       # to run the integration tests
+boto3            # AWS SDK for Python -- used by the loader, the tests, and inside the Lambdas
+awscli           # the `aws` command used by run.sh
+ministack        # the AWS emulator itself
+pytest           # to run the integration tests
+
+# Stage-2 (L1 preprocess) dependencies -- also bundled into the Lambda zip by run.sh.
+nltk             # tokenization, POS tagging, WordNet lemmatization
+
+# Stage-3 (L2 profanity) dependencies -- also bundled into the Lambda zip by run.sh.
+better-profanity # profanity detection (profanity-filter is broken: ordered-set-stubs removed from PyPI)

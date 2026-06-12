@@ -115,9 +115,37 @@ make_lambda () {  # $1 = function name, $2 = source dir under lambdas/
   ${AWS} lambda wait function-active --function-name "${NAME}" 2>/dev/null
   echo "  lambda ready: ${NAME}"
 }
-make_lambda preprocess preprocess
-make_lambda profanity  profanity
-make_lambda sentiment  sentiment
+
+# Like make_lambda but also pip-installs requirements.txt into a package/ dir
+# and bundles it in the zip. Used for Lambdas with third-party dependencies.
+make_lambda_with_deps () {  # $1 = function name, $2 = source dir under lambdas/
+  local NAME="$1" DIR="$2"
+  ( cd "lambdas/${DIR}"
+    rm -rf package lambda.zip
+    if [ -f requirements.txt ]; then
+      pip install -q -r requirements.txt -t package/
+    fi
+    zip -q lambda.zip handler.py
+    zip -qj lambda.zip ../../common/config.py ../../common/s3_events.py
+    if [ -d package ]; then
+      cd package && zip -qr ../lambda.zip . && cd ..
+    fi )
+  ${AWS} lambda delete-function --function-name "${NAME}" >/dev/null 2>&1
+  ${AWS} lambda create-function \
+    --function-name "${NAME}" \
+    --runtime python3.11 \
+    --timeout 60 \
+    --zip-file "fileb://lambdas/${DIR}/lambda.zip" \
+    --handler handler.handler \
+    --role arn:aws:iam::000000000000:role/lambda-role \
+    --environment '{"Variables":{"STAGE":"local"}}' >/dev/null
+  ${AWS} lambda wait function-active --function-name "${NAME}" 2>/dev/null
+  echo "  lambda ready: ${NAME}"
+}
+
+make_lambda_with_deps preprocess preprocess
+make_lambda_with_deps profanity  profanity
+make_lambda_with_deps sentiment  sentiment
 make_lambda aggregate  aggregate
 make_lambda report     report
 

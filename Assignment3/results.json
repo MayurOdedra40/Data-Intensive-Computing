@@ -1,0 +1,10 @@
+{
+  "totalDevsetReviews": 0,
+  "sentiment": {
+    "positive": 0,
+    "neutral": 0,
+    "negative": 0
+  },
+  "profanityFailed": 0,
+  "bannedUsers": []
+}
