@@ -15,7 +15,7 @@ import nltk
 # Download NLTK data to /tmp on cold start (Lambda filesystem is read-only elsewhere).
 _NLTK_DIR = "/tmp/nltk_data"
 nltk.data.path.insert(0, _NLTK_DIR)
-for _pkg in ("averaged_perceptron_tagger", "wordnet", "stopwords", "omw-1.4"):
+for _pkg in ("averaged_perceptron_tagger", "averaged_perceptron_tagger_eng", "wordnet", "stopwords", "omw-1.4"):
     nltk.download(_pkg, download_dir=_NLTK_DIR, quiet=True)
 
 from nltk.corpus import stopwords as _nltk_sw
