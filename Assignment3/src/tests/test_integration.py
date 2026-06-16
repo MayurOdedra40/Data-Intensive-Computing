@@ -92,6 +92,7 @@ def test_smoke_one_review_reaches_reviews_table():
     item = poll_item(reviews_table, {"reviewId": {"S": rid}})
     assert item["reviewId"]["S"] == rid
     assert item["reviewerID"]["S"] == "SMOKE"
+    assert "tokens" in item  # proves L1 ran and wrote the preprocessed envelope
 
 
 # ----------------------------------------------------------------------------------------
@@ -170,3 +171,22 @@ def test_sentiment_classification():
     neg_item = poll_item(reviews_table, {"reviewId": {"S": neg_rid}},
                          want_attr="sentiment", want_value="negative")
     assert neg_item["sentiment"]["S"] == "negative"
+
+
+# ----------------------------------------------------------------------------------------
+# Test 4 -- PROFANITY: a review containing a real bad word lands in Reviews with isProfane=True.
+# Proves: L2's actual detection logic runs (not just the forceProfane test hook).
+# ----------------------------------------------------------------------------------------
+def test_real_profanity_detection():
+    reviews_table = param("/dic-a3/tables/reviews")
+
+    rid = make_review_id("PROF", "APRO", 300, "this is bullshit product", "terrible")
+    drop_review({
+        "reviewId": rid, "reviewerID": "PROF", "asin": "APRO",
+        "summary": "terrible", "reviewText": "this is bullshit product",
+        "overall": 1.0, "unixReviewTime": 300, "source": "cornercase",
+    })
+
+    item = poll_item(reviews_table, {"reviewId": {"S": rid}},
+                     want_attr="isProfane", want_value=True)
+    assert item["isProfane"]["BOOL"] is True

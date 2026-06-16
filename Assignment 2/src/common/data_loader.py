@@ -47,8 +47,16 @@ def load_reviews_rdd(sc, path: str):
         .filter(lambda r: r is not None)
     )
 
+
 def load_reviews_df(spark, path: str):
-    """Read JSON-lines reviews into a Spark DataFrame."""
+    """Read JSON-lines reviews into a Spark DataFrame.
+
+    Spark infers the schema from the JSON; the columns we care about for
+    Parts 2 and 3 are ``reviewText`` (string) and ``category`` (string).
+    Used by the DataFrame pipeline (Part 2) and the classifier (Part 3).
+    """
+
     return spark.read.json(path)
-    
+
+
 __all__ = ["load_reviews_rdd", "resolve_path", "load_reviews_df"]

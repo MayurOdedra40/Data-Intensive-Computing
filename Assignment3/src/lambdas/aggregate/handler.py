@@ -39,6 +39,7 @@ def _put_review_once(envelope) -> bool:
         "source":     {"S": envelope.get("source", "devset")},
         "isProfane":  {"BOOL": bool(envelope.get("isProfane", False))},
         "sentiment":  {"S": envelope.get("sentiment", "neutral")},
+        "tokens":     {"L": [{"S": t} for t in envelope.get("tokens", [])]},
     }
     try:
         _ddb.put_item(
