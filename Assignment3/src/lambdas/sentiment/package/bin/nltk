@@ -1,4 +1,4 @@
-#!/home/andar/anul_3/DIC/.venv/bin/python3
+#!/home/paisie/DIC/.env/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys

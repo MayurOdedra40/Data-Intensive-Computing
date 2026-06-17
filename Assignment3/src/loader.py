@@ -46,7 +46,10 @@ def to_envelope(rec: dict, source: str = "devset") -> tuple[str, dict]:
         "asin":           rec["asin"],
         "summary":        rec.get("summary", ""),
         "reviewText":     rec.get("reviewText", ""),
-        "overall":        rec.get("overall"),
+        # Default a missing/null star rating to neutral (3.0). A raw null here would otherwise
+        # travel down the chain and crash L3 sentiment on float(None). The real devset always
+        # has `overall`, so this only guards malformed input.
+        "overall":        rec["overall"] if rec.get("overall") is not None else 3.0,
         "unixReviewTime": rec.get("unixReviewTime"),
         "source":         source,
     }

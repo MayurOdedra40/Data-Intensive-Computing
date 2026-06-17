@@ -54,7 +54,11 @@ def handler(event, context):
         envelope = s3_events.read_envelope(bucket, key)
         summary = envelope.get("summary") or ""
         review_text = envelope.get("reviewText") or ""
-        overall = float(envelope.get("overall", 3.0))
+        # `overall` may be missing OR present-but-null (the loader emits null when a source
+        # row has no star rating). `.get(..., 3.0)` only covers the missing case, so a null
+        # would reach float(None) and crash the whole stage -- fall back to neutral (3.0).
+        raw_overall = envelope.get("overall")
+        overall = float(raw_overall) if raw_overall is not None else 3.0
         sentiment, score = _score(summary, review_text, overall)
         envelope["sentiment"] = sentiment
         envelope["sentimentScore"] = score
