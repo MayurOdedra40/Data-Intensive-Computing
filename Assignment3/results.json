@@ -1,10 +1,16 @@
 {
-  "totalDevsetReviews": 0,
+  "totalDevsetReviews": 52920,
   "sentiment": {
-    "positive": 0,
-    "neutral": 0,
-    "negative": 0
+    "positive": 46220,
+    "neutral": 807,
+    "negative": 5893
   },
-  "profanityFailed": 0,
-  "bannedUsers": []
+  "profanityFailed": 5119,
+  "bannedUsers": [
+    "A13QTZ8CIMHHG4",
+    "A2OJW07GQRNJUT",
+    "A320TMDV6KCFU",
+    "A3QS1EPDZTLPWS",
+    "AFVQZQ8PW0L"
+  ]
 }

@@ -65,12 +65,13 @@ def _upload(bucket: str, review_id: str, envelope: dict) -> None:
     )
 
 
-def load(path: str, limit: int, batch_size: int, batch_delay: float) -> None:
+def load(path: str, limit: int, batch_size: int, batch_delay: float, skip: int = 0) -> None:
     bucket = ssm.get_parameter(Name="/dic-a3/buckets/ingest")["Parameter"]["Value"]
 
     total_loaded = 0
     batch_num    = 0
     batch_buf: list[tuple[str, dict]] = []
+    skipped = 0
 
     def _flush_batch() -> None:
         nonlocal total_loaded, batch_num
@@ -95,6 +96,9 @@ def load(path: str, limit: int, batch_size: int, batch_delay: float) -> None:
             line = raw_line.strip()
             if not line:
                 continue
+            if skipped < skip:
+                skipped += 1
+                continue
             rec = json.loads(line)
             review_id, envelope = to_envelope(rec)
             batch_buf.append((review_id, envelope))
@@ -116,10 +120,12 @@ def main() -> int:
                              "Set to 0 to disable batching.")
     parser.add_argument("--batch-delay", type=float, default=30.0,
                         help="Seconds to sleep between batches (default: 30)")
+    parser.add_argument("--skip", type=int, default=0,
+                        help="Skip the first N reviews (default: 0)")
     args = parser.parse_args()
 
     batch_size = args.batch_size if args.batch_size > 0 else args.limit
-    load(args.dataset, args.limit, batch_size, args.batch_delay)
+    load(args.dataset, args.limit, batch_size, args.batch_delay, args.skip)
     return 0
 
 

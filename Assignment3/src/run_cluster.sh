@@ -77,12 +77,14 @@ bash run.sh
 REVIEW_COUNT="${REVIEW_COUNT:-78829}"
 BATCH_SIZE="${BATCH_SIZE:-200}"
 BATCH_DELAY="${BATCH_DELAY:-30}"
+SKIP="${SKIP:-52920}"
 echo ""
-echo "==> [3/4] Loading ${REVIEW_COUNT} review(s) in batches of ${BATCH_SIZE} ..."
+echo "==> [3/4] Loading ${REVIEW_COUNT} review(s) in batches of ${BATCH_SIZE} (skip=${SKIP}) ..."
 echo "    (pausing ${BATCH_DELAY}s between batches to let the pipeline drain)"
 python3 loader.py "${DATA_FILE}" "${REVIEW_COUNT}" \
   --batch-size "${BATCH_SIZE}" \
-  --batch-delay "${BATCH_DELAY}"
+  --batch-delay "${BATCH_DELAY}" \
+  --skip "${SKIP}"
 
 # ── 5. Poll until all reviews appear in the Reviews table ────────────────────
 echo ""
