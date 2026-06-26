@@ -18,6 +18,12 @@ _ENDPOINT = "http://localhost:4566" if os.getenv("STAGE") == "local" else None
 _ddb = boto3.client("dynamodb", endpoint_url=_ENDPOINT)
 _s3  = boto3.client("s3",       endpoint_url=_ENDPOINT)
 
+# Names read once at cold start (reused across warm invocations). report is on-demand, so this is
+# mostly for consistency with the chain handlers (which read SSM at module scope, not per call).
+REVIEWS_TABLE   = config.get("/dic-a3/tables/reviews")
+CUSTOMERS_TABLE = config.get("/dic-a3/tables/customers")
+EXPORT_BUCKET   = config.get("/dic-a3/buckets/export")
+
 
 def _scan_all(table, **kwargs):
     """Paginate through an entire DynamoDB table scan and yield every item."""
@@ -29,16 +35,12 @@ def _scan_all(table, **kwargs):
 
 
 def handler(event, context):
-    reviews_table   = config.get("/dic-a3/tables/reviews")
-    customers_table = config.get("/dic-a3/tables/customers")
-    export_bucket   = config.get("/dic-a3/buckets/export")
-
     # ── Reviews table: only count devset reviews, not cornercase test data ──────────────
     sentiment_counts = {"positive": 0, "neutral": 0, "negative": 0}
     profanity_failed = 0
 
     for item in _scan_all(
-        reviews_table,
+        REVIEWS_TABLE,
         FilterExpression="#src = :devset",
         ExpressionAttributeNames={"#src": "source"},        # "source" is a reserved word
         ExpressionAttributeValues={":devset": {"S": "devset"}},
@@ -52,7 +54,7 @@ def handler(event, context):
     # ── Customers table: collect all banned reviewerIDs ──────────────────────────────────
     banned_users = []
     for item in _scan_all(
-        customers_table,
+        CUSTOMERS_TABLE,
         FilterExpression="banned = :t",
         ExpressionAttributeValues={":t": {"BOOL": True}},
     ):
@@ -65,7 +67,7 @@ def handler(event, context):
     }
 
     _s3.put_object(
-        Bucket=export_bucket,
+        Bucket=EXPORT_BUCKET,
         Key="report.json",
         Body=json.dumps(result, indent=2).encode("utf-8"),
         ContentType="application/json",

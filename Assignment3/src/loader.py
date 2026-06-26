@@ -33,13 +33,24 @@ ssm = boto3.client("ssm", endpoint_url=ENDPOINT)
 
 
 def make_review_id(rec: dict) -> str:
-    text = (rec.get("reviewText") or "") + (rec.get("summary") or "")
-    digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
-    return f'{rec["reviewerID"]}_{rec["asin"]}_{rec["unixReviewTime"]}_{digest}'
+    """Stable, collision-free id derived from the ENTIRE review object (every field).
+
+    The old id was built from only reviewerID + asin + unixReviewTime + sha1(reviewText+summary),
+    so two devset rows that differ ONLY in another field (e.g. `category`) produced the SAME id and
+    collided in the Reviews table. Hashing the whole record fixes that.
+
+    - `json.dumps(..., sort_keys=True)` is a canonical serialization: same fields -> same string
+      regardless of key order, so the id is deterministic across runs.
+    - The full SHA-256 hex digest (64 chars) makes accidental collisions impossible in practice.
+    - Two rows now share an id ONLY if they are byte-for-byte identical (a genuine duplicate row),
+      which is exactly when the idempotency gate SHOULD treat them as one review.
+    """
+    canonical = json.dumps(rec, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def to_envelope(rec: dict, source: str = "devset") -> tuple[str, dict]:
-    review_id = make_review_id(rec)
+def to_envelope(rec: dict, source: str = "devset", review_id: str | None = None) -> tuple[str, dict]:
+    review_id = review_id or make_review_id(rec)
     envelope = {
         "reviewId":       review_id,
         "reviewerID":     rec["reviewerID"],
@@ -65,13 +76,16 @@ def _upload(bucket: str, review_id: str, envelope: dict) -> None:
     )
 
 
-def load(path: str, limit: int, batch_size: int, batch_delay: float, skip: int = 0) -> None:
+def load(path: str, limit: int, batch_size: int, batch_delay: float,
+         skip: int = 0, skip_ids: set | None = None) -> None:
     bucket = ssm.get_parameter(Name="/dic-a3/buckets/ingest")["Parameter"]["Value"]
+    skip_ids = skip_ids or set()
 
     total_loaded = 0
     batch_num    = 0
     batch_buf: list[tuple[str, dict]] = []
     skipped = 0
+    skipped_by_id = 0
 
     def _flush_batch() -> None:
         nonlocal total_loaded, batch_num
@@ -100,13 +114,21 @@ def load(path: str, limit: int, batch_size: int, batch_delay: float, skip: int =
                 skipped += 1
                 continue
             rec = json.loads(line)
-            review_id, envelope = to_envelope(rec)
+            review_id = make_review_id(rec)
+            # Skip reviews already processed by an earlier run (segment). This is what keeps runs
+            # disjoint so their segment files can be added together (see checkpoints.py).
+            if review_id in skip_ids:
+                skipped_by_id += 1
+                continue
+            _, envelope = to_envelope(rec, review_id=review_id)
             batch_buf.append((review_id, envelope))
 
             if len(batch_buf) >= batch_size:
                 _flush_batch()
 
     _flush_batch()   # upload the last (possibly partial) batch
+    if skipped_by_id:
+        print(f"  (skipped {skipped_by_id} review(s) already processed by earlier runs)")
     print(f"\nDone — {total_loaded} review(s) uploaded to '{bucket}'.")
 
 
@@ -121,11 +143,20 @@ def main() -> int:
     parser.add_argument("--batch-delay", type=float, default=30.0,
                         help="Seconds to sleep between batches (default: 30)")
     parser.add_argument("--skip", type=int, default=0,
-                        help="Skip the first N reviews (default: 0)")
+                        help="Skip the first N reviews by position (default: 0)")
+    parser.add_argument("--skip-ids-file", default=None,
+                        help="Path to a newline-delimited list of reviewIds to skip "
+                             "(reviews already processed by earlier runs). Used for resume.")
     args = parser.parse_args()
 
+    skip_ids: set = set()
+    if args.skip_ids_file and os.path.exists(args.skip_ids_file):
+        with open(args.skip_ids_file, encoding="utf-8") as fh:
+            skip_ids = {ln.strip() for ln in fh if ln.strip()}
+        print(f"Loaded {len(skip_ids)} already-processed reviewId(s) to skip.")
+
     batch_size = args.batch_size if args.batch_size > 0 else args.limit
-    load(args.dataset, args.limit, batch_size, args.batch_delay, args.skip)
+    load(args.dataset, args.limit, batch_size, args.batch_delay, args.skip, skip_ids)
     return 0
 
 

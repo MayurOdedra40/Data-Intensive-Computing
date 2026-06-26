@@ -79,16 +79,19 @@ reads it. This matters: `reviewId` is the idempotency key (see §5), so it must 
 exactly one place or duplicates could drift.
 
 ```python
-import hashlib
+import hashlib, json
 def make_review_id(rec):
-    text = (rec.get("reviewText") or "") + (rec.get("summary") or "")
-    digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
-    return f'{rec["reviewerID"]}_{rec["asin"]}_{rec["unixReviewTime"]}_{digest}'
+    # Hash the ENTIRE record (every field) with a canonical, key-sorted serialization.
+    canonical = json.dumps(rec, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 ```
 
-Why the `sha1(...)` suffix? In the real dataset, a handful of reviews share the same
-`reviewerID_asin_unixReviewTime` triple (exact-duplicate rows). The content-hash suffix makes
-the id unique so those duplicates don't collide in the `Reviews` table.
+Why hash the whole object? The earlier id used only
+`reviewerID_asin_unixReviewTime_sha1(reviewText+summary)`, so devset rows that differ ONLY in
+another field (notably `category`) produced the SAME id and collided in the `Reviews` table. Hashing
+every field makes the id unique for any row that differs at all. The full SHA-256 digest avoids
+truncation collisions. Two rows now share an id ONLY if they are byte-for-byte identical (a genuine
+duplicate row) — exactly when the idempotency gate should treat them as one.
 
 ---
 

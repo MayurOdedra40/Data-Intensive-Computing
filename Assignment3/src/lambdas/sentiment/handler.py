@@ -16,11 +16,26 @@ Thresholds (SSM):
 Trigger:  new object in `reviews-profanity`.
 Writes:   envelope + `sentiment` + `sentimentScore` → `reviews-scored`.
 """
+import os
+
 import nltk
 
-_NLTK_DIR = "/tmp/nltk_data"
-nltk.data.path.insert(0, _NLTK_DIR)
-nltk.download("vader_lexicon", download_dir=_NLTK_DIR, quiet=True)
+# NLTK data resolution: prefer the corpora pre-bundled into the zip by run.sh (so the Lambda needs
+# no network at runtime -- the cluster sandbox may have none), fall back to a /tmp download for
+# local dev. `nltk.data.find` is offline; `nltk.download` runs only on a miss. See the longer
+# comment in lambdas/preprocess/handler.py.
+_BUNDLED_NLTK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nltk_data")
+_TMP_NLTK = "/tmp/nltk_data"
+for _p in (_BUNDLED_NLTK, _TMP_NLTK):
+    if _p not in nltk.data.path:
+        nltk.data.path.insert(0, _p)
+
+# Check the exact resource VADER loads (it reads the lexicon from INSIDE the bundled zip via
+# this zip-internal path), so a bundled vader_lexicon.zip satisfies the check with no network.
+try:
+    nltk.data.find("sentiment/vader_lexicon.zip/vader_lexicon/vader_lexicon.txt")
+except LookupError:
+    nltk.download("vader_lexicon", download_dir=_TMP_NLTK, quiet=True)
 
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
@@ -32,6 +47,8 @@ _sia = SentimentIntensityAnalyzer()
 POS_THRESH  = config.get_float("/dic-a3/config/sentiment-pos")
 NEG_THRESH  = config.get_float("/dic-a3/config/sentiment-neg")
 OVR_WEIGHT  = config.get_float("/dic-a3/config/overall-weight")
+# Output bucket read once at cold start (reused across warm invocations), not per invocation.
+TARGET_BUCKET = config.get("/dic-a3/buckets/scored")
 
 
 def _score(summary: str, review_text: str, overall: float) -> tuple:
@@ -49,7 +66,6 @@ def _score(summary: str, review_text: str, overall: float) -> tuple:
 
 
 def handler(event, context):
-    target = config.get("/dic-a3/buckets/scored")
     for bucket, key in s3_events.parse_records(event):
         envelope = s3_events.read_envelope(bucket, key)
         summary = envelope.get("summary") or ""
@@ -62,5 +78,5 @@ def handler(event, context):
         sentiment, score = _score(summary, review_text, overall)
         envelope["sentiment"] = sentiment
         envelope["sentimentScore"] = score
-        s3_events.write_envelope(target, key, envelope)
+        s3_events.write_envelope(TARGET_BUCKET, key, envelope)
     return {"statusCode": 200}

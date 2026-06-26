@@ -35,8 +35,12 @@ def _check(text: str) -> tuple:
     return is_profane, bad_words
 
 
+# Read the output-bucket name from SSM ONCE at cold start and reuse it across warm invocations,
+# instead of calling SSM on every invocation. Same pattern as aggregate/handler.py.
+TARGET_BUCKET = config.get("/dic-a3/buckets/profanity")
+
+
 def handler(event, context):
-    target = config.get("/dic-a3/buckets/profanity")
     for bucket, key in s3_events.parse_records(event):
         envelope = s3_events.read_envelope(bucket, key)
         if envelope.get("forceProfane"):
@@ -49,5 +53,5 @@ def handler(event, context):
             is_profane, bad_words = _check(f"{summary} {review_text}")
             envelope["isProfane"] = is_profane
             envelope["badWords"] = bad_words
-        s3_events.write_envelope(target, key, envelope)
+        s3_events.write_envelope(TARGET_BUCKET, key, envelope)
     return {"statusCode": 200}

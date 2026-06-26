@@ -64,32 +64,31 @@ put_param /dic-a3/config/sentiment-neg  -0.05
 put_param /dic-a3/config/overall-weight 0.3
 
 # ---------------------------------------------------------------------------------------
-# 3. DynamoDB tables. Delete-before-create gives us idempotency AND a clean, empty start
-#    (so test counts are deterministic). Only the KEY attribute goes in attribute-definitions.
+# 3. DynamoDB tables. Reviews -- one item per processed review; Customers -- the ban ledger
+#    (impoliteCount + banned, per reviewerID). Only the KEY attribute goes in attribute-definitions.
+#
+#    Delete-before-create gives a clean, deterministic start every run. That is exactly what the
+#    resumable design wants too: each run uses a FRESH, empty DynamoDB as per-run scratch and
+#    persists its results to its own segment file on disk (see checkpoints.py). Progress lives in
+#    the segment files, never in the (ephemeral) tables -- so wiping here is always safe.
 # ---------------------------------------------------------------------------------------
 echo "==> [3/5] DynamoDB tables"
 
-# Reviews -- one item per processed review.
-${AWS} dynamodb delete-table --table-name Reviews >/dev/null 2>&1 \
-  && ${AWS} dynamodb wait table-not-exists --table-name Reviews 2>/dev/null
-${AWS} dynamodb create-table \
-  --table-name Reviews \
-  --attribute-definitions AttributeName=reviewId,AttributeType=S \
-  --key-schema AttributeName=reviewId,KeyType=HASH \
-  --billing-mode PAY_PER_REQUEST >/dev/null
-${AWS} dynamodb wait table-exists --table-name Reviews 2>/dev/null
-echo "  table ready: Reviews"
+ensure_table () {  # $1 = table name, $2 = key attribute name
+  local T="$1" KEY="$2"
+  ${AWS} dynamodb delete-table --table-name "$T" >/dev/null 2>&1 \
+    && ${AWS} dynamodb wait table-not-exists --table-name "$T" 2>/dev/null
+  ${AWS} dynamodb create-table \
+    --table-name "$T" \
+    --attribute-definitions AttributeName="$KEY",AttributeType=S \
+    --key-schema AttributeName="$KEY",KeyType=HASH \
+    --billing-mode PAY_PER_REQUEST >/dev/null
+  ${AWS} dynamodb wait table-exists --table-name "$T" 2>/dev/null
+  echo "  table ready: $T"
+}
 
-# Customers -- the ban ledger: impoliteCount + banned, per reviewerID.
-${AWS} dynamodb delete-table --table-name Customers >/dev/null 2>&1 \
-  && ${AWS} dynamodb wait table-not-exists --table-name Customers 2>/dev/null
-${AWS} dynamodb create-table \
-  --table-name Customers \
-  --attribute-definitions AttributeName=reviewerID,AttributeType=S \
-  --key-schema AttributeName=reviewerID,KeyType=HASH \
-  --billing-mode PAY_PER_REQUEST >/dev/null
-${AWS} dynamodb wait table-exists --table-name Customers 2>/dev/null
-echo "  table ready: Customers"
+ensure_table Reviews   reviewId
+ensure_table Customers reviewerID
 
 # ---------------------------------------------------------------------------------------
 # 4. Lambda functions. Each zip contains handler.py PLUS the two shared modules, all at the
@@ -118,12 +117,35 @@ make_lambda () {  # $1 = function name, $2 = source dir under lambdas/
 
 # Like make_lambda but also pip-installs requirements.txt into a package/ dir
 # and bundles it in the zip. Used for Lambdas with third-party dependencies.
-make_lambda_with_deps () {  # $1 = function name, $2 = source dir under lambdas/
-  local NAME="$1" DIR="$2"
+#
+# Optional $3 = space-separated list of NLTK data packages to PRE-BUNDLE. We download them at
+# BUILD time into package/nltk_data (which ends up next to handler.py in the deployed Lambda) so
+# the function needs NO network at runtime -- the cluster Lambda sandbox may have no outbound
+# internet, which would otherwise make L1/L3's cold-start nltk.download hang/fail.
+make_lambda_with_deps () {  # $1 = function name, $2 = source dir, $3 = NLTK packages (optional)
+  local NAME="$1" DIR="$2" NLTK_PKGS="$3"
   ( cd "lambdas/${DIR}"
     rm -rf package lambda.zip
     if [ -f requirements.txt ]; then
       pip install -q -r requirements.txt -t package/
+    fi
+    if [ -n "${NLTK_PKGS}" ]; then
+      echo "  bundling NLTK data into ${DIR}: ${NLTK_PKGS}"
+      # Use the nltk we just installed into package/ to fetch the corpora into package/nltk_data.
+      PYTHONPATH="package" python3 - "${NLTK_PKGS}" <<'PY'
+import sys, nltk
+for pkg in sys.argv[1].split():
+    nltk.download(pkg, download_dir="package/nltk_data", quiet=True)
+PY
+      # NLTK's newer path-security check sometimes leaves a corpus as a .zip instead of
+      # extracting it; nltk.data.find() can't resolve a corpus from an un-extracted zip, so the
+      # bundled data would be invisible at runtime. Extract remaining zips in place and drop them,
+      # so each corpus exists as a plain directory (e.g. corpora/wordnet/).
+      # EXCEPTION: vader_lexicon stays zipped -- VADER loads it via the zip-internal path
+      # "sentiment/vader_lexicon.zip/vader_lexicon/vader_lexicon.txt", so extracting it breaks it.
+      find package/nltk_data -name '*.zip' ! -name 'vader_lexicon.zip' | while read -r _z; do
+        ( cd "$(dirname "$_z")" && unzip -qo "$(basename "$_z")" && rm -f "$(basename "$_z")" )
+      done
     fi
     zip -q lambda.zip handler.py
     zip -qj lambda.zip ../../common/config.py ../../common/s3_events.py
@@ -143,9 +165,9 @@ make_lambda_with_deps () {  # $1 = function name, $2 = source dir under lambdas/
   echo "  lambda ready: ${NAME}"
 }
 
-make_lambda_with_deps preprocess preprocess
+make_lambda_with_deps preprocess preprocess "averaged_perceptron_tagger_eng averaged_perceptron_tagger wordnet omw-1.4 stopwords"
 make_lambda_with_deps profanity  profanity
-make_lambda_with_deps sentiment  sentiment
+make_lambda_with_deps sentiment  sentiment "vader_lexicon"
 make_lambda aggregate  aggregate
 make_lambda report     report
 

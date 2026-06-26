@@ -12,11 +12,31 @@ import re
 
 import nltk
 
-# Download NLTK data to /tmp on cold start (Lambda filesystem is read-only elsewhere).
-_NLTK_DIR = "/tmp/nltk_data"
-nltk.data.path.insert(0, _NLTK_DIR)
-for _pkg in ("averaged_perceptron_tagger", "averaged_perceptron_tagger_eng", "wordnet", "stopwords", "omw-1.4"):
-    nltk.download(_pkg, download_dir=_NLTK_DIR, quiet=True)
+# NLTK data resolution. We PRE-BUNDLE the corpora into the zip (run.sh downloads them into
+# package/nltk_data, which lands next to this handler in the deployed Lambda) so the function
+# needs NO network at runtime -- important on the cluster, where the Lambda sandbox may have no
+# outbound internet. We still keep a /tmp download fallback for local dev where the data wasn't
+# bundled. `nltk.data.find` is offline; only `nltk.download` touches the network, and we call it
+# strictly on a miss.
+_BUNDLED_NLTK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nltk_data")
+_TMP_NLTK = "/tmp/nltk_data"
+for _p in (_BUNDLED_NLTK, _TMP_NLTK):
+    if _p not in nltk.data.path:
+        nltk.data.path.insert(0, _p)
+
+# (resource path used by nltk.data.find, download package name)
+_REQUIRED = [
+    ("taggers/averaged_perceptron_tagger_eng", "averaged_perceptron_tagger_eng"),
+    ("taggers/averaged_perceptron_tagger",     "averaged_perceptron_tagger"),
+    ("corpora/wordnet",                        "wordnet"),
+    ("corpora/omw-1.4",                        "omw-1.4"),
+    ("corpora/stopwords",                      "stopwords"),
+]
+for _res, _pkg in _REQUIRED:
+    try:
+        nltk.data.find(_res)
+    except LookupError:
+        nltk.download(_pkg, download_dir=_TMP_NLTK, quiet=True)
 
 from nltk.corpus import stopwords as _nltk_sw
 from nltk.corpus import wordnet
@@ -73,12 +93,17 @@ def _preprocess(text: str) -> list:
     return result
 
 
+# Read the output-bucket name from SSM ONCE at cold start and reuse it across warm invocations,
+# instead of calling SSM on every invocation (~1 call per review on the hot path). Same pattern as
+# aggregate/handler.py and the sentiment thresholds.
+TARGET_BUCKET = config.get("/dic-a3/buckets/preprocessed")
+
+
 def handler(event, context):
-    target = config.get("/dic-a3/buckets/preprocessed")
     for bucket, key in s3_events.parse_records(event):
         envelope = s3_events.read_envelope(bucket, key)
         summary = envelope.get("summary") or ""
         review_text = envelope.get("reviewText") or ""
         envelope["tokens"] = _preprocess(f"{summary} {review_text}")
-        s3_events.write_envelope(target, key, envelope)
+        s3_events.write_envelope(TARGET_BUCKET, key, envelope)
     return {"statusCode": 200}

@@ -30,7 +30,12 @@ def _make_clients(endpoint: str):
     return boto3.client("dynamodb", **kwargs), boto3.client("ssm", **kwargs), boto3.client("s3", **kwargs)
 
 
-# ── DynamoDB helpers ──────────────────────────────────────────────────────────────────────
+# ── DynamoDB / SSM helpers ──────────────────────────────────────────────────────────────────
+
+def _param(ssm, name: str) -> str:
+    """Read one SSM String parameter value."""
+    return ssm.get_parameter(Name=name)["Parameter"]["Value"]
+
 
 def _scan_all(ddb, table: str, **kwargs):
     """Paginate through all items in a DynamoDB table scan."""
@@ -95,6 +100,73 @@ def compute_results(ddb, ssm) -> dict:
         "sentiment": sentiment_counts,
         "profanityFailed": profanity_failed,
         "bannedUsers": banned_users,
+    }
+
+
+def compute_state(ddb, ssm) -> dict:
+    """Read DynamoDB and return the FULL resumable state (superset of compute_results).
+
+    This is the single source the checkpointer snapshots to disk and finalize_results.py reads
+    back. Unlike compute_results it ALSO returns the per-customer impolite counts (so we can "see
+    when it reaches 3") and the configured ban threshold, so the final results can be recomputed
+    purely from the saved file with no DynamoDB access. It is intentionally quiet -- the checkpointer
+    calls it every ~30s and does its own concise logging.
+
+    Shape (also the on-disk intermediate_results.json schema, minus `updatedAt`):
+        {
+          "processedCount": int,                      # devset rows in the Reviews table
+          "sentiment": {"positive","neutral","negative": int},
+          "profanityFailed": int,
+          "banThreshold": int,
+          "userProfaneCounts": {reviewerID: int},     # Customers.impoliteCount per user
+          "bannedUsers": [reviewerID, ...],           # users with count > banThreshold
+        }
+    """
+    reviews_table   = _param(ssm, "/dic-a3/tables/reviews")
+    customers_table = _param(ssm, "/dic-a3/tables/customers")
+    ban_threshold   = int(_param(ssm, "/dic-a3/config/ban-threshold"))
+
+    # ── Reviews table: sentiment counts + profanity failures + the reviewId set (devset only) ──
+    # processed_ids is what makes runs disjoint: the next run skips these reviewIds, so segments
+    # never overlap and can simply be added together (see checkpoints.py).
+    sentiment_counts = {"positive": 0, "neutral": 0, "negative": 0}
+    profanity_failed = 0
+    processed_ids = []
+    for item in _scan_all(
+        ddb,
+        reviews_table,
+        FilterExpression="#src = :devset",
+        ExpressionAttributeNames={"#src": "source"},   # "source" is a DynamoDB reserved word
+        ExpressionAttributeValues={":devset": {"S": "devset"}},
+    ):
+        sentiment = item.get("sentiment", {}).get("S", "neutral")
+        sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
+        if item.get("isProfane", {}).get("BOOL", False):
+            profanity_failed += 1
+        rid = item.get("reviewId", {}).get("S")
+        if rid:
+            processed_ids.append(rid)
+
+    # ── Customers table: per-user impolite counts (the ban ledger) ────────────────────────────
+    # L4 only writes a Customers row when a review is profane, so every row has impoliteCount >= 1.
+    user_profane_counts = {}
+    for item in _scan_all(ddb, customers_table):
+        reviewer_id = item["reviewerID"]["S"]
+        count = int(item.get("impoliteCount", {}).get("N", "0"))
+        user_profane_counts[reviewer_id] = count
+
+    banned_users = sorted(
+        uid for uid, count in user_profane_counts.items() if count > ban_threshold
+    )
+
+    return {
+        "processedCount": sum(sentiment_counts.values()),
+        "sentiment": sentiment_counts,
+        "profanityFailed": profanity_failed,
+        "banThreshold": ban_threshold,
+        "userProfaneCounts": user_profane_counts,
+        "bannedUsers": banned_users,
+        "processedReviewIds": processed_ids,
     }
 
 

@@ -154,3 +154,77 @@ Assignment3/
     reviews_devset.json       # input dataset (or fetch from HDFS)
     stopwords.txt
 ```
+
+<!-- ==================================================
+  FINAL RESULTS  (devset reviews only)
+==================================================
+  Combined from segments  : 5
+  Total reviews processed : 78827
+  Positive                : 67907
+  Neutral                 : 1281
+  Negative                : 9639
+  Failed profanity check  : 6982
+  Banned users (8)       :
+    - A13QTZ8CIMHHG4  (impolite reviews: 4)
+    - A2EDZH51XHFA9B  (impolite reviews: 6)
+    - A2HVL790PBWYTU  (impolite reviews: 4)
+    - A2OJW07GQRNJUT  (impolite reviews: 5)
+    - A320TMDV6KCFU  (impolite reviews: 8)
+    - A3LZGLA88K0LA0  (impolite reviews: 4)
+    - A3QS1EPDZTLPWS  (impolite reviews: 4)
+    - AFVQZQ8PW0L  (impolite reviews: 13) -->
+
+{
+  "totalDevsetReviews": 78829,
+  "sentiment": {
+    "positive": 67908,
+    "neutral": 1282,
+    "negative": 9639
+  },
+  "profanityFailed": 6983,
+  "bannedUsers": [
+    "A13QTZ8CIMHHG4",
+    "A2EDZH51XHFA9B",
+    "A2HVL790PBWYTU",
+    "A2OJW07GQRNJUT",
+    "A320TMDV6KCFU",
+    "A3LZGLA88K0LA0",
+    "A3QS1EPDZTLPWS",
+    "AFVQZQ8PW0L"
+  ]
+}
+  
+
+● Confirmed — nothing is missing or stuck. The devset has 2 reviewIds that
+  each appear on two lines:
+
+  - A1MACFR0X42D8E_B00466H3MM_1319932800_f2f73a4d ×2
+  - A2SB75CW5MXA1P_B005ADNUIG_1372118400_bbad07fd ×2
+
+  So the 78,829 lines contain only 78,827 distinct reviews. Since reviewId is
+  the idempotency key
+  (reviewerID_asin_unixReviewTime_sha1(reviewText+summary)[:8]), two lines
+  sharing all of those are exact-duplicate reviews, and L4's
+  ConditionExpression="attribute_not_exists(reviewId)" correctly counts each
+  once. 78,827 is the right number — the pipeline did its job.
+
+  Why the re-run does nothing: REVIEW_COUNT defaults to 78829, so REMAINING =
+  78829 − 78827 = 2. The loader is then asked to load 2 more reviews, but
+  every line's reviewId is already in the processed set, so it uploads zero.
+  You'll get that harmless "process 2 / does nothing" dance on every future
+  re-run.
+
+  Two things worth doing:
+
+  1. Report it as a finding, not a loss. This is a nice point for the report:
+  real-world data had exact duplicates, and the idempotency-key design
+  dedupes them transparently. The correct devset total is 78,827.
+  1. (Optional) silence the phantom-2 on re-runs so the script reports
+  "nothing left to do." Cleanest fix: set the target to distinct reviews
+  rather than raw lines. Either run with REVIEW_COUNT=78827, or make
+  run_cluster.sh compute the dataset's distinct-id count instead of
+  hardcoding 78829.
+
+  Want me to verify the two duplicate pairs are byte-identical records (vs.
+  coincidental key collisions), and/or patch run_cluster.sh to derive the
+  target from distinct reviewIds?
